@@ -37,7 +37,8 @@ set(CMAKE_CXX_STANDARD 17)
 
 if (MSVC)
 else ()
-	add_compile_options(-mcx16 -Wall -Wextra -Werror "$<$<CONFIG:DEBUG>:-fno-inline>")
+	# libfmt triggers the unused-local-typedef warning, which breaks the build.
+	add_compile_options(-mcx16 -Wall -Wextra -Werror -Wno-unused-local-typedef "$<$<CONFIG:DEBUG>:-fno-inline>")
 	# Disable GCC warnings that give a large number of false positives.
 	if (${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
 		add_compile_options(-Wno-attributes -Wno-cast-function-type)
