@@ -1,0 +1,90 @@
+name: Verona sandbox CI
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the main
+  # branch
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  linux:
+    strategy:
+      matrix:
+        # Build each combination of OS and release/debug variants
+        os: [ "ubuntu-20.04" ] #, "ubuntu-22.04" ]
+        build-type: [ Release, Debug ]
+        compiler:
+        - CC: clang
+          CXX: clang++
+        - CC: gcc-10
+          CXX: g++-10
+      # Don't abort runners if a single one fails
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} ${{ matrix.build-type }} ${{ matrix.compiler.CC }}
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install build dependencies
+      run: |
+        set -eo pipefail
+        sudo apt-get update
+        sudo apt-get install -y ninja-build libbsd-dev libseccomp-dev libfmt-dev
+    - name: Configure CMake
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_C_COMPILER=${{ matrix.compiler.CC }} -DCMAKE_CXX_COMPILER=${{ matrix.compiler.CXX }} -G Ninja 
+      # Build with a nice ninja status line
+    - name: Build
+      working-directory: ${{github.workspace}}/build
+      run: NINJA_STATUS="%p [%f:%s/%t] %o/s, %es" ninja -v
+    - name: Inspect libraries
+      working-directory: ${{github.workspace}}/build
+      run: |
+        for I in tests/*.so ; do
+          echo $I
+          nm $I | grep sandbox_init
+        done
+    - name: Test
+      working-directory: ${{github.workspace}}/build
+      run: ctest --output-on-failure -j 4 --timeout 60
+
+  # GitHub doesn't natively support *BSD, but we can run them in VMs on Mac /
+  # Linux runners
+  freebsd:
+    strategy:
+      matrix:
+        # Build each combination of OS, version, and release/debug variants
+        # FreeBSD and OpenBSD run on xhyve, netbsd needs qemu
+        version: ['13.1', '12.4']
+        build-type: [ Release, Debug ]
+      # Don't abort runners if a single one fails
+      fail-fast: false
+    # Kill these jobs if they take too long.
+    timeout-minutes: 20
+    runs-on: macos-latest
+    name: FreeBSD-${{ matrix.version}} ${{ matrix.build-type }}
+    steps:
+    - uses: actions/checkout@v3
+    - uses: cross-platform-actions/action@v0.10.0
+      with:
+        operating_system: freebsd
+        architecture: x86-64
+        version: ${{ matrix.version}}
+        shell: bash
+        run: |
+          sudo pkg ins -y cmake ninja git libfmt
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_CXX_FLAGS='-I/usr/local/include' -DCMAKE_SHARED_LINKER_FLAGS='-L/usr/local/lib' -DCMAKE_EXE_LINKER_FLAGS='-L/usr/local/lib' -G Ninja 
+          cd ${{github.workspace}}/build
+          NINJA_STATUS="%p [%f:%s/%t] %o/s, %es" ninja
+          ctest -j 4 --output-on-failure --timeout 60
+
+  all-checks:
+    needs: [linux, freebsd]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Dummy step
+      run: true
