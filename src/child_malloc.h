@@ -121,7 +121,7 @@ namespace sandbox
        * This back end does not need to hold any extra metadata and so exports
        * the default slab metadata type.
        */
-      using SlabMetadata = snmalloc::FrontendSlabMetadata;
+      using SlabMetadata = snmalloc::DefaultSlabMetadata;
 
       /**
        * Allocate a chunk of memory and install its metadata in the pagemap.
@@ -142,7 +142,7 @@ namespace sandbox
        * shared memory for allocators.
        */
       template<typename T>
-      static snmalloc::capptr::Arena<void>
+      static snmalloc::capptr::Alloc<void>
       alloc_meta_data(LocalState*, size_t size);
 
       /**

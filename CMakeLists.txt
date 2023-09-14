@@ -2,12 +2,11 @@ cmake_minimum_required(VERSION 3.8)
 include(FetchContent)
 
 set(SNMALLOC_HEADER_ONLY_LIBRARY ON)
-set(SNMALLOC_USE_CXX17 ON CACHE BOOL "Build snmalloc in legacy CXX17 mode as long as Verona stays on CXX17" FORCE)
 
 FetchContent_Declare(
   snmalloc
   GIT_REPOSITORY https://github.com/microsoft/snmalloc
-  GIT_TAG        ddc5703cc87e092a2cbdf23d779eec1eb16991a3
+  GIT_TAG        126e77f2a524447b397bd7cf309ed3186d234a9b
 )
 
 FetchContent_MakeAvailable(snmalloc)
@@ -30,15 +29,14 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(snmalloc)
 
-include_directories(AFTER "${snmalloc_SOURCE_DIR}/src")
 include_directories(BEFORE "${CMAKE_SOURCE_DIR}/include")
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 
 if (MSVC)
 else ()
 	# libfmt triggers the unused-local-typedef warning, which breaks the build.
-	add_compile_options(-mcx16 -Wall -Wextra -Werror -Wno-unused-local-typedef "$<$<CONFIG:DEBUG>:-fno-inline>")
+	add_compile_options(-Wall -Wextra -Werror -Wno-unused-local-typedef "$<$<CONFIG:DEBUG>:-fno-inline>")
 	# Disable GCC warnings that give a large number of false positives.
 	if (${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
 		add_compile_options(-Wno-attributes -Wno-cast-function-type)
@@ -92,6 +90,9 @@ add_executable(library_runner ${CHILD_SOURCES})
 find_package(Threads REQUIRED)
 target_link_libraries(library_runner Threads::Threads)
 target_link_libraries(sandbox Threads::Threads)
+
+target_link_libraries(library_runner snmalloc)
+target_link_libraries(sandbox snmalloc)
 
 find_package(fmt REQUIRED CONFIG)
 target_link_libraries(library_runner fmt::fmt)

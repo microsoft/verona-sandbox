@@ -42,12 +42,6 @@ namespace sandbox
      * argument frame provided by the sandbox caller.
      */
     void* msg_buffer = nullptr;
-    /**
-     * The message queue for the parent's allocator.  This is stored in the
-     * shared region because the child must be able to free memory allocated by
-     * the parent.
-     */
-    snmalloc::RemoteAllocator allocator_state;
 
     /**
      * A token that is logically passed from the parent to the child and back
@@ -81,6 +75,13 @@ namespace sandbox
        */
       std::atomic<int> callback_depth = 0;
     } token;
+
+    /**
+     * The message queue for the parent's allocator.  This is stored in the
+     * shared region because the child must be able to free memory allocated by
+     * the parent.
+     */
+    snmalloc::RemoteAllocator allocator_state;
 
     /**
      * Tear down the parent-owned contents of this shared memory region.

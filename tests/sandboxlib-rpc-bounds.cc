@@ -5,6 +5,7 @@
 #include "process_sandbox/cxxsandbox.h"
 #include "process_sandbox/sandbox.h"
 #include "process_sandbox/shared_memory_region.h"
+#include "snmalloc/backend_helpers/defaultpagemapentry.h"
 
 #include <limits>
 #include <stdio.h>
@@ -45,7 +46,7 @@ void try_alloc(const void* base)
   SANDBOX_INVARIANT(
     sendRequest({AllocChunk, {0x100, 0, 0}}).error != 0,
     "Allocating less than a chunk spuriously returned success");
-  uintptr_t ras = FrontendMetaEntry<FrontendSlabMetadata>::encode(
+  uintptr_t ras = FrontendMetaEntry<DefaultSlabMetadata>::encode(
     &header->allocator_state,
     sizeclass_t::from_small_class(size_to_sizeclass_const(MIN_CHUNK_SIZE)));
   message<>("Trying to allocate parent-owned memory");
