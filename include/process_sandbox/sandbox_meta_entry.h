@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "snmalloc/backend_helpers/defaultpagemapentry.h"
+
 #include <snmalloc/snmalloc_core.h>
 
 namespace sandbox
@@ -12,26 +14,30 @@ namespace sandbox
    * pagemap entries as owned by the child.
    */
   class SandboxMetaEntry
-  : public snmalloc::FrontendMetaEntry<snmalloc::FrontendSlabMetadata>
+  : public snmalloc::FrontendMetaEntry<snmalloc::DefaultSlabMetadata>
   {
     /**
      * Bit set if this metaentry is owned by the sandbox.
      */
     static constexpr snmalloc::address_t SANDBOX_BIT = 1 << 3;
 
+    /**
+     * Helper type for the superclass that we inherit from.
+     */
+    using Super = snmalloc::FrontendMetaEntry<snmalloc::DefaultSlabMetadata>;
+
   public:
     /**
      * Inherit all constructors.
      */
-    using snmalloc::FrontendMetaEntry<
-      snmalloc::FrontendSlabMetadata>::FrontendMetaEntry;
+    using Super::FrontendMetaEntry;
 
     /**
      * Does this metaentry correspond to sandbox-owned memory
      */
     bool is_sandbox_owned() const
     {
-      return (meta & SANDBOX_BIT) == SANDBOX_BIT;
+      return (Super::meta & SANDBOX_BIT) == SANDBOX_BIT;
     }
 
     /**
@@ -39,22 +45,22 @@ namespace sandbox
      */
     void claim_for_sandbox()
     {
-      meta |= SANDBOX_BIT;
+      Super::meta |= SANDBOX_BIT;
     }
 
     [[nodiscard]] bool is_unowned() const
     {
-      auto m = meta & ~SANDBOX_BIT;
-      return ((m == 0) || (m == META_BOUNDARY_BIT)) &&
-        (remote_and_sizeclass == 0);
+      auto m = Super::meta & ~SANDBOX_BIT;
+      return ((m == 0) || (m == Super::META_BOUNDARY_BIT)) &&
+        (Super::remote_and_sizeclass == 0);
     }
 
-    [[nodiscard]] SNMALLOC_FAST_PATH snmalloc::FrontendSlabMetadata*
+    [[nodiscard]] SNMALLOC_FAST_PATH snmalloc::DefaultSlabMetadata*
     get_slab_metadata() const
     {
-      SNMALLOC_ASSERT(get_remote() != nullptr);
-      auto m = meta & ~(SANDBOX_BIT | META_BOUNDARY_BIT);
-      return snmalloc::unsafe_from_uintptr<snmalloc::FrontendSlabMetadata>(m);
+      SNMALLOC_ASSERT(Super::get_remote() != nullptr);
+      auto m = Super::meta & ~(SANDBOX_BIT | Super::META_BOUNDARY_BIT);
+      return snmalloc::unsafe_from_uintptr<snmalloc::DefaultSlabMetadata>(m);
     }
   };
 }

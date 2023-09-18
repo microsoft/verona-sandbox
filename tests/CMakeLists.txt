@@ -24,6 +24,7 @@ set(SANDBOX_TESTS
 	)
 
 find_package(Threads REQUIRED)
+find_package(fmt REQUIRED CONFIG)
 
 find_package(CURL)
 if (${CURL_FOUND})
@@ -35,7 +36,8 @@ function(setup_sandbox_test_properties TEST_NAME)
 		INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/include/;${snmalloc_SOURCE_DIR}/src"
 	)
 	target_link_libraries(${TEST_NAME} Threads::Threads)
-	target_link_libraries(${TEST_NAME} fmt)
+	target_link_libraries(${TEST_NAME} fmt::fmt)
+	target_link_libraries(${TEST_NAME} snmalloc)
 	if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 		target_link_libraries(${TEST_NAME} rt)
 	endif ()

@@ -8,6 +8,8 @@
 #include "process_sandbox/platform/platform.h"
 #include "process_sandbox/sandbox.h"
 #include "process_sandbox/shared_memory_region.h"
+#include "snmalloc/ds_core/bits.h"
+#include "snmalloc/ds_core/defines.h"
 
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -40,6 +42,7 @@ using address_t = snmalloc::Aal::address_t;
 // initialised.  We must instead call the raw system call versions.
 extern "C" ssize_t __sys_write(int fd, const void* buf, size_t nbytes);
 extern "C" ssize_t __sys_read(int fd, void* buf, size_t nbytes);
+extern "C" int __sys_open(const char* path, int flags, mode_t mode);
 #  define write __sys_write
 #  define read __sys_read
 #elif defined(__linux__)
@@ -236,9 +239,10 @@ namespace sandbox
     SnmallocGlobals::Backend::alloc_chunk(
       SnmallocGlobals::LocalState&, size_t size, uintptr_t ras)
   {
-    auto* ms = new (
-      metadata_range.alloc_range(sizeof(SnmallocGlobals::Backend::SlabMetadata))
-        .unsafe_ptr()) SnmallocGlobals::Backend::SlabMetadata();
+    auto* ms = new (metadata_range
+                      .alloc_range(snmalloc::bits::next_pow2(
+                        sizeof(SnmallocGlobals::Backend::SlabMetadata)))
+                      .unsafe_ptr()) SnmallocGlobals::Backend::SlabMetadata();
     auto arena = snmalloc::capptr::Arena<void>::unsafe_from(
       reinterpret_cast<void*>(requestHostService(
         AllocChunk,
@@ -269,17 +273,20 @@ namespace sandbox
     auto addr = snmalloc::capptr::Arena<void>::unsafe_from(start.unsafe_ptr());
     metadata_range.dealloc_range(
       snmalloc::capptr::Arena<void>::unsafe_from(&meta_common),
-      sizeof(SnmallocGlobals::Backend::SlabMetadata));
+      snmalloc::bits::next_pow2(
+        sizeof(SnmallocGlobals::Backend::SlabMetadata)));
     requestHostService(
       DeallocChunk, addr.unsafe_uintptr(), static_cast<uintptr_t>(size));
   }
 
   template<>
-  snmalloc::capptr::Arena<void> SnmallocGlobals::Backend::alloc_meta_data<
+  snmalloc::capptr::Alloc<void> SnmallocGlobals::Backend::alloc_meta_data<
     snmalloc::CoreAllocator<sandbox::SnmallocGlobals>>(LocalState*, size_t size)
   {
     size = snmalloc::bits::next_pow2(size);
-    return allocator_range.alloc_range(size);
+    auto p = allocator_range.alloc_range(snmalloc::bits::next_pow2(size));
+    return capptr_to_user_address_control(
+      Aal::capptr_bound<void, capptr::bounds::AllocFull>(p, size));
   }
 
   void PalRange::dealloc_range(snmalloc::capptr::Arena<void> base, size_t size)
@@ -829,12 +836,13 @@ namespace
    * will also set `errno`).  These must be kept in the same order as the
    * `CallbackKind` enumeration.
    */
-  constexpr std::tuple callbacks{&callback_open,
-                                 &callback_stat,
-                                 &callback_access,
-                                 &callback_openat,
-                                 &callback_bind_or_connect<Bind>,
-                                 &callback_bind_or_connect<Connect>};
+  constexpr std::tuple callbacks{
+    &callback_open,
+    &callback_stat,
+    &callback_access,
+    &callback_openat,
+    &callback_bind_or_connect<Bind>,
+    &callback_bind_or_connect<Connect>};
 
   /**
    * Dispatch to a callback given a system call frame.  This will call the

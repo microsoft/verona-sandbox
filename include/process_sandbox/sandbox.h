@@ -287,11 +287,22 @@ namespace sandbox
        * memory object starts with a fixed layout.  This region is still
        * treated as untrusted (the child process can modify it) but nothing in
        * that part should ever be passed directly to the parent.
+       *
+       * This behaviour can be changed by setting AllowMetadata to true, which
+       * will also include the message queue heads for the remote allocator as
+       * permitted addresses.
        */
+      template<bool AllowMetadata = false>
       bool contains(const void* ptr, size_t sz)
       {
-        return (ptr >= pointer_offset(base, sizeof(SharedMemoryRegion))) &&
-          (top > ptr) && (pointer_diff(ptr, top) >= sz);
+        const void* allowedBase = AllowMetadata ?
+          pointer_offset(
+            base,
+            offsetof(SharedMemoryRegion, allocator_state) -
+              sizeof(SharedMemoryRegion)) :
+          base;
+        return (ptr >= allowedBase) && (top > ptr) &&
+          (pointer_diff(ptr, top) >= sz);
       }
 
       /**
@@ -323,7 +334,7 @@ namespace sandbox
        * Metadata for a slab.  This back end does not store any backend-specific
        * metadata here.
        */
-      using SlabMetadata = snmalloc::FrontendSlabMetadata;
+      using SlabMetadata = snmalloc::DefaultSlabMetadata;
 
       /**
        * Allocate a chunk, its associated metaslab, and install its metadata
@@ -403,7 +414,7 @@ namespace sandbox
        * accidentally do.
        */
       template<typename T>
-      static snmalloc::capptr::Chunk<void>
+      static snmalloc::capptr::Alloc<void>
       alloc_meta_data(LocalState*, size_t size);
 
       template<bool potentially_out_of_range = false>
@@ -435,7 +446,7 @@ namespace sandbox
      * for the specified type.  If it does not come from the sandbox identified
      * by `ls` then this return a null pointer.
      */
-    template<typename T, SNMALLOC_CONCEPT(snmalloc::capptr::ConceptBound) B>
+    template<typename T, SNMALLOC_CONCEPT(snmalloc::capptr::IsBound) B>
     static auto capptr_domesticate(LocalState* ls, snmalloc::CapPtr<T, B> p)
     {
       // If we know the size that we're being asked for then use it in the
@@ -443,7 +454,9 @@ namespace sandbox
       // will check that this is part of a valid allocation, we'll check that
       // it's sufficiently large to store a freelist entry.
       using ObjType = std::conditional_t<std::is_same_v<T, void>, void*, T>;
-      T* unsafe_ptr = ls->contains(p.unsafe_ptr(), sizeof(ObjType)) ?
+      // Domestication may include pointers to the queue itself,
+      T* unsafe_ptr =
+        ls->contains<true /*allow metadata*/>(p.unsafe_ptr(), sizeof(ObjType)) ?
         p.unsafe_ptr() :
         nullptr;
       using Tame = typename B::template with_wildness<
